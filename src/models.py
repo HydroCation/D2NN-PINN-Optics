@@ -85,8 +85,8 @@ class OpticalD2NN(nn.Module):
         drift_distance: float = 14 * 0.75e-3,
         dx: Optional[float] = None,
         use_aperture: bool = False,
-        aperture_radius_ratio: float = 0.45,
-        aperture_order: int = 4,
+        aperture_radius_ratio: float = 0.85,
+        aperture_order: int = 2,
         phase_init: str = "uniform",
         modulation: str = "phase_only",
     ) -> None:
@@ -205,6 +205,9 @@ class OpticalD2NN(nn.Module):
             Output full complex field tensor at the detector plane.
         """
         u = u_in
+        # Apply spatial aperture to input plane (layer 0), mid-stack pupil (layer 3 for K=8), and final plate (layer 7 for K=8)
+        aperture_layers = {0, self.num_layers // 2 - 1, self.num_layers - 1}
+
         for idx, phi in enumerate(self.phases):
             u = self.propagator(u)
             if self.modulation == "complex":
@@ -212,7 +215,8 @@ class OpticalD2NN(nn.Module):
                 u = u * (amp * torch.exp(1j * phi))
             elif self.modulation == "apertured":
                 u = u * torch.exp(1j * phi)
-                u = u * self.spatial_aperture  # Suppress boundary leakage
+                if idx in aperture_layers:
+                    u = u * self.spatial_aperture
             else:
                 u = u * torch.exp(1j * phi)
                 if self.spatial_mask is not None:

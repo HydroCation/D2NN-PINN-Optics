@@ -74,8 +74,8 @@ class RunConfig:
     alpha: float = 25.0
     eta_min: float = 5e-4
     use_aperture: bool = False
-    aperture_radius_ratio: float = 0.45
-    aperture_order: int = 4
+    aperture_radius_ratio: float = 0.85
+    aperture_order: int = 2
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary."""

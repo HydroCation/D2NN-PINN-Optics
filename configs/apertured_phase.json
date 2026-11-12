@@ -1,5 +1,5 @@
 {
-  "tag": "apertured_phase",
+  "tag": "model_c_apertured_refined",
   "model_type": "apertured",
   "grid_n": 128,
   "fov_size": 8,
@@ -9,12 +9,12 @@
   "lr": 0.015,
   "batch_size": 64,
   "epochs": 2500,
-  "target_eff": 0.03,
+  "target_eff": 0.012,
   "loss_mode": "balanced",
   "seed": 42,
   "device": "cuda",
   "eta_min": 0.0005,
   "use_aperture": true,
-  "aperture_radius_ratio": 0.45,
-  "aperture_order": 4
+  "aperture_radius_ratio": 0.85,
+  "aperture_order": 2
 }
