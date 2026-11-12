@@ -74,6 +74,25 @@ def parse_args() -> argparse.Namespace:
         help="Identifier tag for run folder naming.",
     )
     parser.add_argument(
+        "--model-type",
+        type=str,
+        default="phase_only",
+        choices=["phase_only", "complex", "apertured"],
+        help="Modulation model type ('phase_only', 'complex', or 'apertured').",
+    )
+    parser.add_argument(
+        "--target-eff",
+        type=float,
+        default=None,
+        help="Target optical efficiency in active FOV (e.g. 0.035 for 3.5%).",
+    )
+    parser.add_argument(
+        "--barrier-weight",
+        type=float,
+        default=None,
+        help="Barrier weight / scaling coefficient for efficiency penalty (c_D).",
+    )
+    parser.add_argument(
         "--quick-test",
         action="store_true",
         help="Run a rapid 10-epoch sanity test.",
@@ -112,6 +131,12 @@ def load_config(args: argparse.Namespace) -> RunConfig:
         config.seed = args.seed
     if args.tag is not None:
         config.tag = args.tag
+    if "--model-type" in sys.argv:
+        config.model_type = args.model_type
+    if args.target_eff is not None:
+        config.target_eff = args.target_eff
+    if args.barrier_weight is not None:
+        config.c_D = args.barrier_weight
 
     if args.quick_test:
         config.epochs = 10
@@ -148,6 +173,7 @@ def main() -> None:
         use_aperture=config.use_aperture,
         aperture_radius_ratio=config.aperture_radius_ratio,
         aperture_order=config.aperture_order,
+        modulation=config.model_type,
     ).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=config.lr)

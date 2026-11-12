@@ -1,0 +1,43 @@
+services:
+  d2nn:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: d2nn-sciml:latest
+    container_name: d2nn-sciml
+    # Map container UID/GID to current host user to avoid root ownership locks on mounted outputs
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MPLBACKEND=Agg
+    volumes:
+      - ./outputs:/workspace/outputs
+      - ./data:/workspace/data
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: ["--config", "configs/default.yaml", "--model-type", "phase_only", "--tag", "model_a_phase_only", "--seed", "42"]
+
+  evaluate:
+    image: d2nn-sciml:latest
+    container_name: d2nn-evaluate
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MPLBACKEND=Agg
+    volumes:
+      - ./outputs:/workspace/outputs
+      - ./data:/workspace/data
+    entrypoint: ["python", "-m", "src.evaluate"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
