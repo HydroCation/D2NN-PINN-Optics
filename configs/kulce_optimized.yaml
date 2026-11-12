@@ -1,0 +1,21 @@
+# Kulce et al. Compact Exponential Efficiency Optimization Configuration
+tag: "kulce_exponential"
+grid_n: 128
+fov_size: 8
+wavelength: 0.00075          # 0.4 THz (0.75 mm)
+drift_distance: 0.00675      # 9 * wavelength = 6.75 mm compact cascade
+num_layers: 8
+lr: 0.015
+batch_size: 64
+epochs: 3000
+target_eff: 0.035
+loss_mode: "exponential"     # Kulce exponential penalty: c_D * exp(-alpha * eff)
+seed: 42
+device: "cuda"
+eta_min: 0.0002
+c_M: 1.0
+c_D: 0.15
+alpha: 25.0
+use_aperture: true
+aperture_radius_ratio: 0.45
+aperture_order: 8

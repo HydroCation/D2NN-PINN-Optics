@@ -1,0 +1,22 @@
+{
+  "tag": "kulce_exponential",
+  "grid_n": 128,
+  "fov_size": 8,
+  "wavelength": 0.00075,
+  "drift_distance": 0.00675,
+  "num_layers": 8,
+  "lr": 0.015,
+  "batch_size": 64,
+  "epochs": 3000,
+  "target_eff": 0.035,
+  "loss_mode": "exponential",
+  "seed": 42,
+  "device": "cuda",
+  "eta_min": 0.0002,
+  "c_M": 1.0,
+  "c_D": 0.15,
+  "alpha": 25.0,
+  "use_aperture": true,
+  "aperture_radius_ratio": 0.45,
+  "aperture_order": 8
+}
