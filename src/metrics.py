@@ -166,3 +166,90 @@ def time_of_flight_latency(
     total_distance = (num_layers + 1) * drift_distance
     tau_seconds = total_distance / speed_of_light
     return tau_seconds * 1e9  # Convert seconds to ns
+
+
+def compute_psnr(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    max_val: Optional[float] = None,
+    eps: float = 1e-12,
+) -> float:
+    """Compute Peak Signal-to-Noise Ratio (PSNR) in decibels (dB) between real intensity maps.
+
+    PSNR = 10 * log10( MAX^2 / (MSE + eps) )
+
+    Args:
+        pred: Predicted intensity tensor (e.g., |c * o_opt|^2).
+        target: Target intensity tensor (e.g., |o_true|^2).
+        max_val: Dynamic range maximum. If None, inferred from target tensor.
+        eps: Small constant to avoid log(0) or division by zero.
+
+    Returns:
+        Scalar PSNR in dB.
+    """
+    mse = torch.mean((pred - target) ** 2).item()
+    if max_val is None:
+        target_max = target.max().item()
+        max_val = max(float(target_max), 1e-4)
+
+    if mse <= eps:
+        return 100.0  # Perfect reconstruction ceiling
+
+    psnr = 10.0 * np.log10((max_val**2) / (mse + eps))
+    return float(psnr)
+
+
+def compute_ssim_2d(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    data_range: Optional[float] = None,
+    k1: float = 0.01,
+    k2: float = 0.03,
+    eps: float = 1e-12,
+) -> float:
+    """Compute Structural Similarity Index Measure (SSIM) between 2D intensity distributions.
+
+    Evaluated across batch of (B, H, W) or single (H, W) real tensors.
+
+    Args:
+        pred: Predicted real intensity map.
+        target: Target real intensity map.
+        data_range: Dynamic range L (default: max(target) - min(target)).
+        k1: SSIM stability constant 1.
+        k2: SSIM stability constant 2.
+        eps: Numerical guard.
+
+    Returns:
+        Mean SSIM score in range [-1.0, 1.0].
+    """
+    if pred.ndim == 2:
+        pred = pred.unsqueeze(0)
+    if target.ndim == 2:
+        target = target.unsqueeze(0)
+
+    # Flatten spatial dimensions per batch sample
+    b_dim = pred.shape[0]
+    p_flat = pred.reshape(b_dim, -1)
+    t_flat = target.reshape(b_dim, -1)
+
+    if data_range is None:
+        dr = (t_flat.max(dim=1).values - t_flat.min(dim=1).values).clamp(min=1e-4)
+    else:
+        dr = torch.full((b_dim,), data_range, device=pred.device, dtype=torch.float32)
+
+    c1 = (k1 * dr) ** 2
+    c2 = (k2 * dr) ** 2
+
+    mu_x = p_flat.mean(dim=1)
+    mu_y = t_flat.mean(dim=1)
+
+    var_x = p_flat.var(dim=1, unbiased=False)
+    var_y = t_flat.var(dim=1, unbiased=False)
+    cov_xy = (p_flat * t_flat).mean(dim=1) - (mu_x * mu_y)
+
+    numerator = (2.0 * mu_x * mu_y + c1) * (2.0 * cov_xy + c2)
+    denominator = (mu_x**2 + mu_y**2 + c1) * (var_x + var_y + c2)
+
+    ssim_per_sample = numerator / (denominator + eps)
+    return float(ssim_per_sample.mean().item())
+

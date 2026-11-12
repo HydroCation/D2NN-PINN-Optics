@@ -14,6 +14,8 @@ from .metrics import (
     optimal_complex_alignment_scale,
     active_energy_efficiency,
     time_of_flight_latency,
+    compute_psnr,
+    compute_ssim_2d,
 )
 from .logger import (
     RunConfig,
@@ -22,6 +24,7 @@ from .logger import (
     ExperimentLogger,
     BenchmarkResults,
 )
+from .data import load_mnist_benchmark_dataset, generate_synthetic_digits_dataset
 
 __all__ = [
     "AngularSpectrumPropagator",
@@ -34,9 +37,13 @@ __all__ = [
     "optimal_complex_alignment_scale",
     "active_energy_efficiency",
     "time_of_flight_latency",
+    "compute_psnr",
+    "compute_ssim_2d",
     "RunConfig",
     "MetricsTracker",
     "OperatorBenchmarker",
     "ExperimentLogger",
     "BenchmarkResults",
+    "load_mnist_benchmark_dataset",
+    "generate_synthetic_digits_dataset",
 ]
