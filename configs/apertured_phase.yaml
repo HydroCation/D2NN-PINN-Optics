@@ -1,0 +1,19 @@
+# Apertured Phase-Only D2NN Configuration (Super-Gaussian Guard Confinement)
+tag: "model_c_apertured"
+model_type: "apertured"
+grid_n: 128
+fov_size: 8
+wavelength: 0.00075          # 0.4 THz (0.75 mm)
+drift_distance: 0.0105       # 14 * wavelength = 10.5 mm[cite: 1]
+num_layers: 8
+lr: 0.015
+batch_size: 64
+epochs: 2500
+target_eff: 0.035            # Target 3.5% active efficiency[cite: 1]
+aperture_radius_ratio: 0.85  # Widened from 0.45 to prevent numerical aperture mode truncation
+aperture_order: 2            # Softened from 4 (4th-order super-Gaussian) to prevent edge ringing
+loss_mode: "balanced"
+seed: 42
+device: "cuda"
+eta_min: 0.0005
+use_aperture: true

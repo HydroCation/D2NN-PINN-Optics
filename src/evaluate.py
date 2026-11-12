@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass
 import json
 import logging
 from pathlib import Path
+import shutil
 import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -747,6 +748,10 @@ class ModelEvaluator:
             )
         elif "config" in self.checkpoint and isinstance(self.checkpoint["config"], dict):
             self.config = RunConfig.from_dict(self.checkpoint["config"])
+        elif (self.checkpoint_path.parent / "config.json").exists():
+            self.config = RunConfig.from_json(self.checkpoint_path.parent / "config.json")
+        elif (self.checkpoint_path.parent / "config.yaml").exists():
+            self.config = RunConfig.from_yaml(self.checkpoint_path.parent / "config.yaml")
         else:
             self.config = RunConfig()
 
@@ -762,13 +767,17 @@ class ModelEvaluator:
             use_aperture=self.config.use_aperture,
             aperture_radius_ratio=self.config.aperture_radius_ratio,
             aperture_order=self.config.aperture_order,
+            modulation=getattr(self.config, "model_type", "phase_only"),
         ).to(self.device)
 
         if "model_state_dict" in self.checkpoint:
-            self.model.load_state_dict(self.checkpoint["model_state_dict"])
+            self.model.load_state_dict(self.checkpoint["model_state_dict"], strict=False)
         elif "phases" in self.checkpoint:
             for i, p_tensor in enumerate(self.checkpoint["phases"]):
                 self.model.phases[i].data.copy_(p_tensor.to(self.device))
+            if "raw_amplitudes" in self.checkpoint and self.model.raw_amplitudes is not None:
+                for i, a_tensor in enumerate(self.checkpoint["raw_amplitudes"]):
+                    self.model.raw_amplitudes[i].data.copy_(a_tensor.to(self.device))
 
         self.model.eval()
         for p in self.model.parameters():
@@ -780,30 +789,45 @@ class ModelEvaluator:
 
     def run_all(
         self,
-        output_dir: Union[str, Path] = "outputs/figures",
+        output_dir: Optional[Union[str, Path]] = None,
         summary_path: Optional[Union[str, Path]] = None,
+        export_figures: bool = False,
+        global_figures_dir: Union[str, Path] = "outputs/figures",
         force_synthetic: bool = False,
         n_samples: int = 1000,
     ) -> Dict[str, Any]:
         """Execute all 3 benchmark regimes and persist summary JSON and figures.
 
         Args:
-            output_dir: Output directory for figures.
-            summary_path: Optional JSON summary destination.
+            output_dir: Target output directory for figures and summaries. If None,
+                        defaults to the checkpoint's parent run directory.
+            summary_path: Optional explicit JSON summary destination.
+            export_figures: Whether to copy generated plots to global_figures_dir.
+            global_figures_dir: Global directory for LaTeX / document exports (outputs/figures).
             force_synthetic: Force procedural synthetic digit generation.
             n_samples: Number of image dataset samples.
 
         Returns:
             Dictionary containing full benchmark results.
         """
-        out_dir = Path(output_dir)
+        # Determine dynamic run output directory
+        if output_dir is None:
+            out_dir = self.checkpoint_path.resolve().parent
+        else:
+            out_dir = Path(output_dir)
+
         out_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Target evaluation directory: {out_dir}")
+
+        harmonic_fig_path = out_dir / "harmonic_spectra_comparison.png"
+        gallery_fig_path = out_dir / "mnist_optical_fft_gallery.png"
+        robustness_fig_path = out_dir / "robustness_ablation.png"
 
         logger.info("=== Regime 1: Harmonic Benchmark ===")
         harmonic_bm = HarmonicBenchmark(fov_size=self.config.fov_size, device=self.device)
         harmonic_res = harmonic_bm.evaluate(
             model=self.model,
-            output_figure_path=out_dir / "harmonic_spectra_comparison.png",
+            output_figure_path=harmonic_fig_path,
         )
         logger.info(
             f"Harmonic Peak Localization Accuracy: {harmonic_res.spectral_peak_localization_accuracy_pct:.2f}% | "
@@ -817,7 +841,7 @@ class ModelEvaluator:
             n_samples=n_samples,
             mnist_root="data/mnist",
             force_synthetic=force_synthetic,
-            output_figure_path=out_dir / "mnist_optical_fft_gallery.png",
+            output_figure_path=gallery_fig_path,
         )
         logger.info(
             f"Image Dataset ({image_res.data_source}) Mean Fidelity: {image_res.mean_field_fidelity_pct:.2f}% | "
@@ -838,7 +862,7 @@ class ModelEvaluator:
             model=self.model,
             test_inputs=rob_inputs,
             test_targets=rob_targets,
-            output_figure_path=out_dir / "robustness_ablation.png",
+            output_figure_path=robustness_fig_path,
         )
         logger.info(
             f"Robustness ablation: 8-bit fid={robust_res.quantization_fidelity_pct[-1]:.2f}%, "
@@ -862,36 +886,35 @@ class ModelEvaluator:
             "robustness_benchmark": robust_res.to_dict(),
         }
 
-        # Route evaluation_summary.json and benchmark_results.json directly into outputs/
-        outputs_dir = Path("outputs")
-        outputs_dir.mkdir(parents=True, exist_ok=True)
-
-        primary_summary_path = outputs_dir / "evaluation_summary.json"
-        with open(primary_summary_path, "w", encoding="utf-8") as f:
+        # 1. Save evaluation_summary.json directly inside out_dir
+        eval_summary_target = (
+            Path(summary_path) if summary_path is not None else out_dir / "evaluation_summary.json"
+        )
+        eval_summary_target.parent.mkdir(parents=True, exist_ok=True)
+        tmp_summary = eval_summary_target.with_suffix(".tmp")
+        with open(tmp_summary, "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
+        tmp_summary.replace(eval_summary_target)
 
-        primary_bench_path = outputs_dir / "benchmark_results.json"
-        with open(primary_bench_path, "w", encoding="utf-8") as f:
+        # 2. Save benchmark_results.json directly inside out_dir
+        bench_target = out_dir / "benchmark_results.json"
+        tmp_bench = bench_target.with_suffix(".tmp")
+        with open(tmp_bench, "w", encoding="utf-8") as f:
             json.dump(benchmark_results, f, indent=2)
+        tmp_bench.replace(bench_target)
 
-        # Handle explicit summary_path or run directory copies
-        if summary_path is not None:
-            custom_summary_path = Path(summary_path)
-            custom_summary_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(custom_summary_path, "w", encoding="utf-8") as f:
-                json.dump(summary, f, indent=2)
-            target_reported = custom_summary_path
-        else:
-            run_dir = self.checkpoint_path.parent
-            if run_dir.exists() and run_dir.name.startswith("run_"):
-                with open(run_dir / "evaluation_summary.json", "w", encoding="utf-8") as f:
-                    json.dump(summary, f, indent=2)
-                with open(run_dir / "benchmark_results.json", "w", encoding="utf-8") as f:
-                    json.dump(benchmark_results, f, indent=2)
-            target_reported = primary_summary_path
+        logger.info(f"Evaluation summary written to: {eval_summary_target}")
+        logger.info(f"Benchmark results written to: {bench_target}")
 
-        logger.info(f"Evaluation summary written to: {target_reported}")
-        logger.info(f"Benchmark results written to: {primary_bench_path}")
+        # 3. Optional Global Mirror: Copy plots to outputs/figures/
+        if export_figures:
+            glob_dir = Path(global_figures_dir)
+            glob_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(harmonic_fig_path, glob_dir / "harmonic_spectra_comparison.png")
+            shutil.copy2(gallery_fig_path, glob_dir / "mnist_optical_fft_gallery.png")
+            shutil.copy2(robustness_fig_path, glob_dir / "robustness_ablation.png")
+            logger.info(f"Mirrored generated figures to: {glob_dir}")
+
         return summary
 
 
@@ -909,20 +932,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--config",
         type=str,
-        default="configs/default.yaml",
-        help="Path to YAML or JSON config.",
+        default=None,
+        help="Path to YAML or JSON config (defaults to embedded checkpoint config or run folder config).",
     )
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="outputs/figures",
-        help="Directory to save output figures.",
+        default=None,
+        help="Custom directory to save output artifacts. Defaults to checkpoint's run directory.",
     )
     parser.add_argument(
         "--summary-path",
         type=str,
         default=None,
         help="Explicit destination path for evaluation_summary.json.",
+    )
+    parser.add_argument(
+        "--export-figures",
+        action="store_true",
+        default=False,
+        help="Mirror generated plots to outputs/figures/ (for LaTeX document building).",
     )
     parser.add_argument(
         "--device",
@@ -958,6 +987,7 @@ def main() -> None:
     evaluator.run_all(
         output_dir=args.output_dir,
         summary_path=args.summary_path,
+        export_figures=args.export_figures,
         force_synthetic=args.force_synthetic,
         n_samples=args.n_samples,
     )

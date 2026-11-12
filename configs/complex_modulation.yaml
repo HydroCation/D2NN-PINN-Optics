@@ -1,0 +1,19 @@
+# Complex Modulation (Trainable Amplitude + Phase) D2NN Configuration
+tag: "complex_modulation"
+model_type: "complex"
+grid_n: 128
+fov_size: 8
+wavelength: 0.00075          # 0.4 THz (0.75 mm)
+drift_distance: 0.0105       # 14 * wavelength = 10.5 mm
+num_layers: 8
+lr: 0.015
+batch_size: 64
+epochs: 2500
+target_eff: 0.015            # 1.5% target efficiency (passive media absorption penalty)
+loss_mode: "balanced"
+seed: 42
+device: "cuda"
+eta_min: 0.0005
+use_aperture: false
+aperture_radius_ratio: 0.45
+aperture_order: 8

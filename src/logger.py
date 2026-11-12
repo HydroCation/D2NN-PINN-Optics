@@ -68,13 +68,14 @@ class RunConfig:
     seed: int = 42
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     tag: str = "d2nn_dft"
+    model_type: str = "phase_only"  # 'phase_only' | 'complex' | 'apertured'
     c_M: float = 1.0
     c_D: float = 0.15
     alpha: float = 25.0
     eta_min: float = 5e-4
     use_aperture: bool = False
     aperture_radius_ratio: float = 0.45
-    aperture_order: int = 8
+    aperture_order: int = 4
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary."""
@@ -621,6 +622,10 @@ class ExperimentLogger:
         }
         if hasattr(model, "phases"):
             checkpoint_payload["phases"] = [p.detach().cpu() for p in model.phases]
+        if hasattr(model, "raw_amplitudes") and model.raw_amplitudes is not None:
+            checkpoint_payload["raw_amplitudes"] = [
+                a.detach().cpu() for a in model.raw_amplitudes
+            ]
 
         torch.save(checkpoint_payload, checkpoint_path)
         self.logger.info(f"Saved phase checkpoint to {checkpoint_path}")

@@ -145,3 +145,44 @@ def test_model_evaluator_end_to_end(tmp_path: Path):
     assert (tmp_path / "figures" / "harmonic_spectra_comparison.png").exists()
     assert (tmp_path / "figures" / "mnist_optical_fft_gallery.png").exists()
     assert (tmp_path / "figures" / "robustness_ablation.png").exists()
+
+
+def test_model_evaluator_dynamic_run_dir_and_export(tmp_path: Path):
+    """Verify dynamic run directory resolution (output_dir=None) and export_figures mirror."""
+    run_dir = tmp_path / "run_20261112_dummy"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    ckpt_path = run_dir / "phases_final.pt"
+
+    model = OpticalD2NN(grid_n=16, fov_size=4, num_layers=2)
+    config = RunConfig(grid_n=16, fov_size=4, num_layers=2, device="cpu")
+    torch.save(
+        {
+            "config": config.to_dict(),
+            "model_state_dict": model.state_dict(),
+            "phases": [p.detach().cpu() for p in model.phases],
+        },
+        ckpt_path,
+    )
+
+    global_export_dir = tmp_path / "exported_figures"
+
+    evaluator = ModelEvaluator(checkpoint_path=ckpt_path, device="cpu")
+    evaluator.run_all(
+        output_dir=None,  # Dynamic resolution to ckpt_path.resolve().parent
+        export_figures=True,
+        global_figures_dir=global_export_dir,
+        force_synthetic=True,
+        n_samples=16,
+    )
+
+    # 1. Verify all 5 deliverables exist directly inside run_dir
+    assert (run_dir / "harmonic_spectra_comparison.png").exists()
+    assert (run_dir / "mnist_optical_fft_gallery.png").exists()
+    assert (run_dir / "robustness_ablation.png").exists()
+    assert (run_dir / "evaluation_summary.json").exists()
+    assert (run_dir / "benchmark_results.json").exists()
+
+    # 2. Verify global figures mirror
+    assert (global_export_dir / "harmonic_spectra_comparison.png").exists()
+    assert (global_export_dir / "mnist_optical_fft_gallery.png").exists()
+    assert (global_export_dir / "robustness_ablation.png").exists()
